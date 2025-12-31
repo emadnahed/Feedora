@@ -20,8 +20,13 @@ const app = express();
 // Trust proxy (for correct IP logging behind reverse proxy)
 app.set('trust proxy', 1);
 
-// Body parsing middleware
-app.use(express.json({ limit: '1mb' }));
+// Body parsing middleware with raw body capture for webhook signature verification
+app.use(express.json({
+  limit: '1mb',
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 
 // Request logging middleware
 app.use(requestLogger);
@@ -30,7 +35,8 @@ app.use(requestLogger);
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('X-XSS-Protection', '1; mode=block');
+  // Content-Security-Policy replaces deprecated X-XSS-Protection
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'");
   next();
 });
 

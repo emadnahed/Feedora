@@ -56,21 +56,22 @@ function getActivitiesByUser(username, options = {}) {
     );
   }
 
+  // ISO 8601 strings can be compared lexicographically for date ordering
   if (startDate) {
-    const start = new Date(startDate);
-    userActivities = userActivities.filter(a => new Date(a.timestamp) >= start);
+    const startIso = new Date(startDate).toISOString();
+    userActivities = userActivities.filter(a => a.timestamp >= startIso);
   }
 
   if (endDate) {
-    const end = new Date(endDate);
-    userActivities = userActivities.filter(a => new Date(a.timestamp) <= end);
+    const endIso = new Date(endDate).toISOString();
+    userActivities = userActivities.filter(a => a.timestamp <= endIso);
   }
 
-  // Sort activities
+  // Sort activities using string comparison (ISO timestamps are lexicographically sortable)
   const sortedActivities = [...userActivities].sort((a, b) => {
-    const dateA = new Date(a.timestamp);
-    const dateB = new Date(b.timestamp);
-    return sort === 'desc' ? dateB - dateA : dateA - dateB;
+    return sort === 'desc'
+      ? b.timestamp.localeCompare(a.timestamp)
+      : a.timestamp.localeCompare(b.timestamp);
   });
 
   // Get total count before pagination

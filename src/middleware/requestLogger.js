@@ -24,9 +24,8 @@ function requestLogger(req, res, next) {
     userAgent: req.get('user-agent')
   });
 
-  // Capture response
-  const originalSend = res.send;
-  res.send = function(body) {
+  // Log response using 'finish' event (more reliable than monkey-patching res.send)
+  res.on('finish', () => {
     const duration = Date.now() - startTime;
 
     logger.info('Outgoing response', {
@@ -36,9 +35,7 @@ function requestLogger(req, res, next) {
       statusCode: res.statusCode,
       duration: `${duration}ms`
     });
-
-    return originalSend.call(this, body);
-  };
+  });
 
   // Add request ID to response headers
   res.setHeader('X-Request-ID', req.requestId);

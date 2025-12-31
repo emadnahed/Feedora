@@ -3,6 +3,20 @@
  * Validates and sanitizes incoming request data
  */
 
+// Validators object defined once at module level for performance
+const webhookValidators = {
+  push: validatePushPayload,
+  pull_request: validatePullRequestPayload,
+  issues: validateIssuesPayload,
+  watch: validateWatchPayload
+};
+
+// Valid activity types
+const VALID_TYPES = ['PUSH', 'PR', 'ISSUE', 'STAR'];
+
+// Valid sort orders
+const VALID_SORTS = ['asc', 'desc'];
+
 /**
  * Validates webhook payload structure
  */
@@ -22,15 +36,7 @@ function validateWebhookPayload(req, res, next) {
     });
   }
 
-  // Validate payload has expected structure based on event type
-  const validators = {
-    push: validatePushPayload,
-    pull_request: validatePullRequestPayload,
-    issues: validateIssuesPayload,
-    watch: validateWatchPayload
-  };
-
-  const validator = validators[eventType];
+  const validator = webhookValidators[eventType];
 
   if (validator) {
     const validation = validator(payload);
@@ -79,10 +85,21 @@ function validateWatchPayload(payload) {
 }
 
 /**
+ * Validates ISO 8601 date string format
+ * @param {string} dateString - Date string to validate
+ * @returns {boolean} - True if valid ISO date
+ */
+function isValidISODate(dateString) {
+  const date = new Date(dateString);
+  return !isNaN(date.getTime()) && dateString === date.toISOString().split('.')[0] + 'Z'
+    || !isNaN(date.getTime());
+}
+
+/**
  * Validates feed query parameters
  */
 function validateFeedParams(req, res, next) {
-  const { limit, type, sort } = req.query;
+  const { limit, type, sort, startDate, endDate } = req.query;
 
   if (limit) {
     const parsedLimit = parseInt(limit, 10);
@@ -94,19 +111,45 @@ function validateFeedParams(req, res, next) {
   }
 
   if (type) {
-    const validTypes = ['PUSH', 'PR', 'ISSUE', 'STAR'];
-    if (!validTypes.includes(type.toUpperCase())) {
+    if (!VALID_TYPES.includes(type.toUpperCase())) {
       return res.status(400).json({
-        error: `Invalid type: must be one of ${validTypes.join(', ')}`
+        error: `Invalid type: must be one of ${VALID_TYPES.join(', ')}`
       });
     }
   }
 
   if (sort) {
-    const validSorts = ['asc', 'desc'];
-    if (!validSorts.includes(sort.toLowerCase())) {
+    if (!VALID_SORTS.includes(sort.toLowerCase())) {
       return res.status(400).json({
         error: 'Invalid sort: must be asc or desc'
+      });
+    }
+  }
+
+  if (startDate) {
+    const start = new Date(startDate);
+    if (isNaN(start.getTime())) {
+      return res.status(400).json({
+        error: 'Invalid startDate: must be a valid ISO 8601 date string'
+      });
+    }
+  }
+
+  if (endDate) {
+    const end = new Date(endDate);
+    if (isNaN(end.getTime())) {
+      return res.status(400).json({
+        error: 'Invalid endDate: must be a valid ISO 8601 date string'
+      });
+    }
+  }
+
+  if (startDate && endDate) {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (start > end) {
+      return res.status(400).json({
+        error: 'Invalid date range: startDate must be before endDate'
       });
     }
   }

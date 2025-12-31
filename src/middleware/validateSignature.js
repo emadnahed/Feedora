@@ -24,7 +24,9 @@ function validateSignature(req, res, next) {
     });
   }
 
-  const payload = JSON.stringify(req.body);
+  // Use raw body buffer for accurate signature verification
+  // JSON.stringify may produce different output than the original payload
+  const payload = req.rawBody || Buffer.from(JSON.stringify(req.body));
   const expectedSignature = 'sha256=' + crypto
     .createHmac('sha256', config.github.webhookSecret)
     .update(payload)

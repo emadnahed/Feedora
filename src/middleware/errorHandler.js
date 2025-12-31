@@ -10,7 +10,7 @@ const config = require('../config');
  * Global error handler
  * Catches all errors and returns consistent error responses
  */
-function errorHandler(err, req, res, next) {
+function errorHandler(err, req, res, _next) {
   // Log the error
   logger.error('Error occurred', {
     requestId: req.requestId,
