@@ -7,20 +7,20 @@ const express = require('express');
 const router = express.Router();
 const { normalizeEvent } = require('../services/eventNormalizer');
 const { addActivity } = require('../store/activityStore');
+const validateSignature = require('../middleware/validateSignature');
+const { validateWebhookPayload } = require('../middleware/validateInput');
 
 /**
  * POST /webhook/github
  * Receives GitHub webhook events and stores normalized activities
+ *
+ * Middleware:
+ * 1. validateSignature - Verifies GitHub HMAC signature
+ * 2. validateWebhookPayload - Validates payload structure
  */
-router.post('/github', (req, res) => {
+router.post('/github', validateSignature, validateWebhookPayload, (req, res) => {
   const eventType = req.headers['x-github-event'];
   const payload = req.body;
-
-  if (!eventType) {
-    return res.status(400).json({
-      error: 'Missing X-GitHub-Event header'
-    });
-  }
 
   const activity = normalizeEvent(eventType, payload);
 
