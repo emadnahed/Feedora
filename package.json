@@ -5,7 +5,10 @@
   "main": "src/app.js",
   "scripts": {
     "start": "node src/app.js",
-    "dev": "node --watch src/app.js"
+    "dev": "node --watch src/app.js",
+    "test": "node --test tests/**/*.test.js",
+    "test:unit": "node --test tests/unit/*.test.js",
+    "test:integration": "node --test tests/integration/*.test.js"
   },
   "keywords": ["github", "webhooks", "activity-feed", "express"],
   "author": "",
