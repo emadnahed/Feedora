@@ -20,19 +20,94 @@ function addActivity(activity) {
 }
 
 /**
- * Get activities for a specific user
+ * Get activities for a specific user with pagination and filtering
  * @param {string} username - GitHub username
  * @param {Object} options - Query options
- * @param {number} options.limit - Maximum number of activities to return
- * @returns {Array} - Array of activities sorted by timestamp (newest first)
+ * @param {number} options.limit - Maximum number of activities to return (default: 20)
+ * @param {string} options.cursor - Cursor for pagination (activity ID)
+ * @param {string} options.type - Filter by activity type (PUSH, PR, ISSUE, STAR)
+ * @param {string} options.repo - Filter by repository name
+ * @param {string} options.sort - Sort order: 'desc' (newest first) or 'asc' (oldest first)
+ * @param {string} options.startDate - Filter activities after this date (ISO string)
+ * @param {string} options.endDate - Filter activities before this date (ISO string)
+ * @returns {Object} - Object with activities array and pagination info
  */
 function getActivitiesByUser(username, options = {}) {
-  const { limit = 50 } = options;
-  const userActivities = activities.get(username) || [];
+  const {
+    limit = 20,
+    cursor = null,
+    type = null,
+    repo = null,
+    sort = 'desc',
+    startDate = null,
+    endDate = null
+  } = options;
 
-  return userActivities
-    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-    .slice(0, limit);
+  let userActivities = activities.get(username) || [];
+
+  // Apply filters
+  if (type) {
+    userActivities = userActivities.filter(a => a.type === type.toUpperCase());
+  }
+
+  if (repo) {
+    userActivities = userActivities.filter(a =>
+      a.repo.toLowerCase().includes(repo.toLowerCase())
+    );
+  }
+
+  if (startDate) {
+    const start = new Date(startDate);
+    userActivities = userActivities.filter(a => new Date(a.timestamp) >= start);
+  }
+
+  if (endDate) {
+    const end = new Date(endDate);
+    userActivities = userActivities.filter(a => new Date(a.timestamp) <= end);
+  }
+
+  // Sort activities
+  const sortedActivities = [...userActivities].sort((a, b) => {
+    const dateA = new Date(a.timestamp);
+    const dateB = new Date(b.timestamp);
+    return sort === 'desc' ? dateB - dateA : dateA - dateB;
+  });
+
+  // Get total count before pagination
+  const total = sortedActivities.length;
+
+  // Apply cursor-based pagination
+  let startIndex = 0;
+  if (cursor) {
+    const cursorIndex = sortedActivities.findIndex(a => a.id === cursor);
+    if (cursorIndex !== -1) {
+      startIndex = cursorIndex + 1;
+    }
+  }
+
+  // Get page of activities
+  const pageActivities = sortedActivities.slice(startIndex, startIndex + limit);
+  const hasMore = startIndex + limit < total;
+  const nextCursor = hasMore ? pageActivities[pageActivities.length - 1]?.id : null;
+
+  return {
+    activities: pageActivities,
+    pagination: {
+      total,
+      hasMore,
+      nextCursor
+    }
+  };
+}
+
+/**
+ * Get activity count for a user
+ * @param {string} username - GitHub username
+ * @returns {number} - Total number of activities
+ */
+function getActivityCount(username) {
+  const userActivities = activities.get(username) || [];
+  return userActivities.length;
 }
 
 /**
@@ -53,6 +128,7 @@ function clearActivities() {
 module.exports = {
   addActivity,
   getActivitiesByUser,
+  getActivityCount,
   getAllActivities,
   clearActivities
 };
