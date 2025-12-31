@@ -28,9 +28,24 @@ const config = {
     ttl: parseInt(process.env.REDIS_TTL, 10) || 300 // 5 minutes default
   },
 
+  // Rate Limiting Configuration
+  rateLimit: {
+    windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 60000, // 1 minute
+    api: {
+      maxRequests: parseInt(process.env.RATE_LIMIT_API_MAX, 10) || 100
+    },
+    webhook: {
+      maxRequests: parseInt(process.env.RATE_LIMIT_WEBHOOK_MAX, 10) || 1000
+    },
+    feed: {
+      maxRequests: parseInt(process.env.RATE_LIMIT_FEED_MAX, 10) || 60
+    }
+  },
+
   // Feature flags
   features: {
-    validateSignature: process.env.VALIDATE_SIGNATURE !== 'false'
+    validateSignature: process.env.VALIDATE_SIGNATURE !== 'false',
+    rateLimiting: process.env.RATE_LIMITING !== 'false'
   }
 };
 

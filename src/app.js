@@ -18,6 +18,7 @@ const feedRoutes = require('./routes/feed.routes');
 // Middleware
 const requestLogger = require('./middleware/requestLogger');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
+const { rateLimiters } = require('./middleware/rateLimiter');
 
 const app = express();
 
@@ -44,9 +45,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// Routes
-app.use('/webhook', webhookRoutes);
-app.use('/feed', feedRoutes);
+// Routes with rate limiting
+app.use('/webhook', rateLimiters.webhook, webhookRoutes);
+app.use('/feed', rateLimiters.feed, feedRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -134,6 +135,7 @@ async function startServer() {
       console.log(`Database: MongoDB connected`);
       console.log(`Cache: ${redis.isRedisConnected() ? 'Redis connected' : 'Disabled'}`);
       console.log(`WebSocket: Enabled`);
+      console.log(`Rate Limiting: Enabled`);
     });
   } catch (error) {
     logger.error('Failed to start server', { error: error.message });
