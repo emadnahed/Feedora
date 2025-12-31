@@ -3,11 +3,13 @@
  * Main Express Application Entry Point
  */
 
+const http = require('http');
 const express = require('express');
 const config = require('./config');
 const logger = require('./utils/logger');
 const database = require('./config/database');
 const redis = require('./config/redis');
+const websocketService = require('./services/websocketService');
 
 // Routes
 const webhookRoutes = require('./routes/webhook.routes');
@@ -48,12 +50,17 @@ app.use('/feed', feedRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
+  const wsStats = websocketService.getStats();
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     database: database.isDbConnected() ? 'connected' : 'disconnected',
-    cache: redis.isRedisConnected() ? 'connected' : 'disconnected'
+    cache: redis.isRedisConnected() ? 'connected' : 'disconnected',
+    websocket: {
+      connected: wsStats.connected,
+      subscriptions: wsStats.subscriptions
+    }
   });
 });
 
@@ -65,7 +72,8 @@ app.get('/', (req, res) => {
     endpoints: {
       webhook: 'POST /webhook/github',
       feed: 'GET /feed/:username',
-      health: 'GET /health'
+      health: 'GET /health',
+      websocket: 'WS /ws'
     },
     documentation: {
       feedParams: {
@@ -76,6 +84,10 @@ app.get('/', (req, res) => {
         sort: 'Sort order (desc or asc)',
         startDate: 'Filter by start date (ISO string)',
         endDate: 'Filter by end date (ISO string)'
+      },
+      websocket: {
+        subscribe: '{"type": "subscribe", "username": "octocat"}',
+        unsubscribe: '{"type": "unsubscribe", "username": "octocat"}'
       }
     }
   });
@@ -86,6 +98,9 @@ app.use(notFoundHandler);
 
 // Global error handler
 app.use(errorHandler);
+
+// Create HTTP server
+const server = http.createServer(app);
 
 // Start server
 async function startServer() {
@@ -100,7 +115,11 @@ async function startServer() {
       logger.warn('Redis connection failed, running without cache', { error: redisError.message });
     }
 
-    app.listen(config.port, () => {
+    // Initialize WebSocket server
+    websocketService.initialize(server);
+    websocketService.startHeartbeat();
+
+    server.listen(config.port, () => {
       logger.info('Server started', {
         port: config.port,
         environment: config.nodeEnv
@@ -110,9 +129,11 @@ async function startServer() {
       console.log(`  POST /webhook/github  - Receive GitHub webhooks`);
       console.log(`  GET  /feed/:username  - Get user activity feed`);
       console.log(`  GET  /health          - Health check`);
+      console.log(`  WS   /ws              - WebSocket real-time feed`);
       console.log(`\nEnvironment: ${config.nodeEnv}`);
       console.log(`Database: MongoDB connected`);
       console.log(`Cache: ${redis.isRedisConnected() ? 'Redis connected' : 'Disabled'}`);
+      console.log(`WebSocket: Enabled`);
     });
   } catch (error) {
     logger.error('Failed to start server', { error: error.message });
@@ -124,4 +145,4 @@ if (require.main === module) {
   startServer();
 }
 
-module.exports = app;
+module.exports = { app, server };

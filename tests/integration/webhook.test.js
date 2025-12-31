@@ -6,7 +6,7 @@ const { describe, it, before, after, beforeEach, afterEach } = require('node:tes
 const assert = require('node:assert');
 const http = require('http');
 const { setupTestDb, clearTestDb, teardownTestDb } = require('../setup');
-const app = require('../../src/app');
+const { app } = require('../../src/app');
 const { clearActivities } = require('../../src/store/activityStore');
 const { pushPayload, pullRequestPayload, issuePayload } = require('../fixtures/webhookPayloads');
 

@@ -7,6 +7,7 @@
 const Activity = require('../models/Activity');
 const logger = require('../utils/logger');
 const { getCachedFeed, setCachedFeed, invalidateUserCache, clearCache } = require('../services/cacheService');
+const websocketService = require('../services/websocketService');
 
 /**
  * Add an activity to the store
@@ -24,6 +25,9 @@ async function addActivity(activity) {
 
     // Invalidate cache for this user since their feed has changed
     await invalidateUserCache(saved.username);
+
+    // Broadcast to subscribed WebSocket clients
+    broadcastActivity(saved.toJSON());
 
     return saved.toJSON();
   } catch (error) {
@@ -174,12 +178,11 @@ async function clearActivities() {
 }
 
 /**
- * Broadcast a new activity (placeholder for Phase 7 WebSocket integration)
+ * Broadcast a new activity to subscribed WebSocket clients
  * @param {Object} activity - Activity to broadcast
  */
 function broadcastActivity(activity) {
-  // This will be implemented in Phase 7 for real-time updates
-  // For now, it's a no-op placeholder
+  websocketService.broadcastActivity(activity);
 }
 
 module.exports = {
