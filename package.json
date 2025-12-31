@@ -1,0 +1,17 @@
+{
+  "name": "feedora",
+  "version": "1.0.0",
+  "description": "A production-style MVP backend that ingests GitHub webhook events, normalizes them, and exposes a user activity feed API similar to GitHub's activity timeline.",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "node --watch src/app.js"
+  },
+  "keywords": ["github", "webhooks", "activity-feed", "express"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "uuid": "^9.0.0"
+  }
+}
