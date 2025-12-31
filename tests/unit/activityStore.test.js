@@ -2,8 +2,9 @@
  * Unit Tests - Activity Store
  */
 
-const { describe, it, beforeEach } = require('node:test');
+const { describe, it, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert');
+const { setupTestDb, clearTestDb, teardownTestDb } = require('../setup');
 const {
   addActivity,
   getActivitiesByUser,
@@ -12,12 +13,20 @@ const {
 } = require('../../src/store/activityStore');
 
 describe('Activity Store', () => {
-  beforeEach(() => {
-    clearActivities();
+  before(async () => {
+    await setupTestDb();
+  });
+
+  after(async () => {
+    await teardownTestDb();
+  });
+
+  beforeEach(async () => {
+    await clearActivities();
   });
 
   describe('addActivity', () => {
-    it('should add an activity to the store', () => {
+    it('should add an activity to the store', async () => {
       const activity = {
         id: '1',
         username: 'testuser',
@@ -27,13 +36,13 @@ describe('Activity Store', () => {
         timestamp: new Date().toISOString()
       };
 
-      addActivity(activity);
-      const count = getActivityCount('testuser');
+      await addActivity(activity);
+      const count = await getActivityCount('testuser');
 
       assert.strictEqual(count, 1);
     });
 
-    it('should add multiple activities for the same user', () => {
+    it('should add multiple activities for the same user', async () => {
       const activity1 = {
         id: '1',
         username: 'testuser',
@@ -52,22 +61,22 @@ describe('Activity Store', () => {
         timestamp: new Date().toISOString()
       };
 
-      addActivity(activity1);
-      addActivity(activity2);
+      await addActivity(activity1);
+      await addActivity(activity2);
 
-      assert.strictEqual(getActivityCount('testuser'), 2);
+      assert.strictEqual(await getActivityCount('testuser'), 2);
     });
   });
 
   describe('getActivitiesByUser', () => {
-    it('should return empty result for unknown user', () => {
-      const result = getActivitiesByUser('unknown');
+    it('should return empty result for unknown user', async () => {
+      const result = await getActivitiesByUser('unknown');
 
       assert.strictEqual(result.activities.length, 0);
       assert.strictEqual(result.pagination.total, 0);
     });
 
-    it('should return activities sorted by timestamp (newest first)', () => {
+    it('should return activities sorted by timestamp (newest first)', async () => {
       const now = new Date();
       const activities = [
         { id: '1', username: 'testuser', type: 'PUSH', repo: 'r', message: 'm', timestamp: new Date(now - 3000).toISOString() },
@@ -75,78 +84,88 @@ describe('Activity Store', () => {
         { id: '3', username: 'testuser', type: 'ISSUE', repo: 'r', message: 'm', timestamp: new Date(now - 2000).toISOString() }
       ];
 
-      activities.forEach(addActivity);
+      for (const activity of activities) {
+        await addActivity(activity);
+      }
 
-      const result = getActivitiesByUser('testuser');
+      const result = await getActivitiesByUser('testuser');
 
       assert.strictEqual(result.activities[0].id, '2'); // Most recent
       assert.strictEqual(result.activities[1].id, '3');
       assert.strictEqual(result.activities[2].id, '1'); // Oldest
     });
 
-    it('should support ascending sort order', () => {
+    it('should support ascending sort order', async () => {
       const now = new Date();
       const activities = [
         { id: '1', username: 'testuser', type: 'PUSH', repo: 'r', message: 'm', timestamp: new Date(now - 3000).toISOString() },
         { id: '2', username: 'testuser', type: 'PR', repo: 'r', message: 'm', timestamp: new Date(now - 1000).toISOString() }
       ];
 
-      activities.forEach(addActivity);
+      for (const activity of activities) {
+        await addActivity(activity);
+      }
 
-      const result = getActivitiesByUser('testuser', { sort: 'asc' });
+      const result = await getActivitiesByUser('testuser', { sort: 'asc' });
 
       assert.strictEqual(result.activities[0].id, '1'); // Oldest first
       assert.strictEqual(result.activities[1].id, '2');
     });
 
-    it('should filter by type', () => {
+    it('should filter by type', async () => {
       const activities = [
         { id: '1', username: 'testuser', type: 'PUSH', repo: 'r', message: 'm', timestamp: new Date().toISOString() },
         { id: '2', username: 'testuser', type: 'PR', repo: 'r', message: 'm', timestamp: new Date().toISOString() },
         { id: '3', username: 'testuser', type: 'PUSH', repo: 'r', message: 'm', timestamp: new Date().toISOString() }
       ];
 
-      activities.forEach(addActivity);
+      for (const activity of activities) {
+        await addActivity(activity);
+      }
 
-      const result = getActivitiesByUser('testuser', { type: 'PUSH' });
+      const result = await getActivitiesByUser('testuser', { type: 'PUSH' });
 
       assert.strictEqual(result.activities.length, 2);
       assert.ok(result.activities.every(a => a.type === 'PUSH'));
     });
 
-    it('should filter by repository', () => {
+    it('should filter by repository', async () => {
       const activities = [
         { id: '1', username: 'testuser', type: 'PUSH', repo: 'testuser/repo1', message: 'm', timestamp: new Date().toISOString() },
         { id: '2', username: 'testuser', type: 'PUSH', repo: 'testuser/repo2', message: 'm', timestamp: new Date().toISOString() }
       ];
 
-      activities.forEach(addActivity);
+      for (const activity of activities) {
+        await addActivity(activity);
+      }
 
-      const result = getActivitiesByUser('testuser', { repo: 'repo1' });
+      const result = await getActivitiesByUser('testuser', { repo: 'repo1' });
 
       assert.strictEqual(result.activities.length, 1);
       assert.strictEqual(result.activities[0].repo, 'testuser/repo1');
     });
 
-    it('should respect limit parameter', () => {
+    it('should respect limit parameter', async () => {
       const activities = Array.from({ length: 10 }, (_, i) => ({
         id: String(i),
         username: 'testuser',
         type: 'PUSH',
         repo: 'r',
         message: 'm',
-        timestamp: new Date().toISOString()
+        timestamp: new Date(Date.now() - i * 1000).toISOString()
       }));
 
-      activities.forEach(addActivity);
+      for (const activity of activities) {
+        await addActivity(activity);
+      }
 
-      const result = getActivitiesByUser('testuser', { limit: 5 });
+      const result = await getActivitiesByUser('testuser', { limit: 5 });
 
       assert.strictEqual(result.activities.length, 5);
       assert.strictEqual(result.pagination.hasMore, true);
     });
 
-    it('should support cursor-based pagination', () => {
+    it('should support cursor-based pagination', async () => {
       const now = new Date();
       const activities = Array.from({ length: 5 }, (_, i) => ({
         id: String(i),
@@ -157,16 +176,18 @@ describe('Activity Store', () => {
         timestamp: new Date(now - i * 1000).toISOString()
       }));
 
-      activities.forEach(addActivity);
+      for (const activity of activities) {
+        await addActivity(activity);
+      }
 
       // Get first page
-      const page1 = getActivitiesByUser('testuser', { limit: 2 });
+      const page1 = await getActivitiesByUser('testuser', { limit: 2 });
       assert.strictEqual(page1.activities.length, 2);
       assert.ok(page1.pagination.hasMore);
       assert.ok(page1.pagination.nextCursor);
 
       // Get second page using cursor
-      const page2 = getActivitiesByUser('testuser', {
+      const page2 = await getActivitiesByUser('testuser', {
         limit: 2,
         cursor: page1.pagination.nextCursor
       });
@@ -174,7 +195,7 @@ describe('Activity Store', () => {
       assert.ok(page2.pagination.hasMore);
 
       // Get third page
-      const page3 = getActivitiesByUser('testuser', {
+      const page3 = await getActivitiesByUser('testuser', {
         limit: 2,
         cursor: page2.pagination.nextCursor
       });
@@ -184,8 +205,8 @@ describe('Activity Store', () => {
   });
 
   describe('clearActivities', () => {
-    it('should clear all activities', () => {
-      addActivity({
+    it('should clear all activities', async () => {
+      await addActivity({
         id: '1',
         username: 'testuser',
         type: 'PUSH',
@@ -194,9 +215,9 @@ describe('Activity Store', () => {
         timestamp: new Date().toISOString()
       });
 
-      clearActivities();
+      await clearActivities();
 
-      assert.strictEqual(getActivityCount('testuser'), 0);
+      assert.strictEqual(await getActivityCount('testuser'), 0);
     });
   });
 });

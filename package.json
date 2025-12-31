@@ -12,11 +12,20 @@
     "test:e2e": "node --test tests/e2e/*.test.js",
     "test:all": "npm run test:unit && npm run test:integration && npm run test:e2e"
   },
-  "keywords": ["github", "webhooks", "activity-feed", "express"],
+  "keywords": [
+    "github",
+    "webhooks",
+    "activity-feed",
+    "express"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
     "express": "^4.18.2",
+    "mongoose": "^9.1.1",
     "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "mongodb-memory-server": "^11.0.1"
   }
 }

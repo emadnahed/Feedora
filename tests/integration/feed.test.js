@@ -2,9 +2,10 @@
  * Integration Tests - Feed Endpoints
  */
 
-const { describe, it, beforeEach, afterEach } = require('node:test');
+const { describe, it, before, after, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert');
 const http = require('http');
+const { setupTestDb, clearTestDb, teardownTestDb } = require('../setup');
 const app = require('../../src/app');
 const { addActivity, clearActivities } = require('../../src/store/activityStore');
 
@@ -39,12 +40,12 @@ function request(options) {
 }
 
 // Helper to create test activities
-function createTestActivities(username, count) {
+async function createTestActivities(username, count) {
   const now = new Date();
   const types = ['PUSH', 'PR', 'ISSUE', 'STAR'];
 
   for (let i = 0; i < count; i++) {
-    addActivity({
+    await addActivity({
       id: `activity-${i}`,
       username,
       type: types[i % types.length],
@@ -56,8 +57,16 @@ function createTestActivities(username, count) {
 }
 
 describe('Feed Endpoints', () => {
+  before(async () => {
+    await setupTestDb();
+  });
+
+  after(async () => {
+    await teardownTestDb();
+  });
+
   beforeEach(async () => {
-    clearActivities();
+    await clearActivities();
     await new Promise((resolve) => {
       server = app.listen(0, resolve);
     });
@@ -86,7 +95,7 @@ describe('Feed Endpoints', () => {
     });
 
     it('should return activities for user', async () => {
-      createTestActivities('testuser', 5);
+      await createTestActivities('testuser', 5);
 
       const { port } = server.address();
       const res = await request({
@@ -103,7 +112,7 @@ describe('Feed Endpoints', () => {
     });
 
     it('should respect limit parameter', async () => {
-      createTestActivities('testuser', 10);
+      await createTestActivities('testuser', 10);
 
       const { port } = server.address();
       const res = await request({
@@ -119,7 +128,7 @@ describe('Feed Endpoints', () => {
     });
 
     it('should filter by type', async () => {
-      createTestActivities('testuser', 8);
+      await createTestActivities('testuser', 8);
 
       const { port } = server.address();
       const res = await request({
@@ -134,7 +143,7 @@ describe('Feed Endpoints', () => {
     });
 
     it('should filter by repository', async () => {
-      createTestActivities('testuser', 6);
+      await createTestActivities('testuser', 6);
 
       const { port } = server.address();
       const res = await request({
@@ -149,7 +158,7 @@ describe('Feed Endpoints', () => {
     });
 
     it('should support pagination with cursor', async () => {
-      createTestActivities('testuser', 10);
+      await createTestActivities('testuser', 10);
 
       const { port } = server.address();
 
@@ -209,7 +218,7 @@ describe('Feed Endpoints', () => {
     });
 
     it('should include pagination metadata', async () => {
-      createTestActivities('testuser', 5);
+      await createTestActivities('testuser', 5);
 
       const { port } = server.address();
       const res = await request({

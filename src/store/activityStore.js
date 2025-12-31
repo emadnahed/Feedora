@@ -1,22 +1,35 @@
 /**
- * In-memory Activity Store
- * Stores normalized activities indexed by username for efficient feed retrieval
+ * Activity Store
+ * MongoDB-backed storage for normalized activities
+ * Provides efficient feed retrieval with pagination and filtering
  */
 
-const activities = new Map();
+const Activity = require('../models/Activity');
+const logger = require('../utils/logger');
 
 /**
  * Add an activity to the store
  * @param {Object} activity - Normalized activity object
+ * @returns {Promise<Object>} - Saved activity
  */
-function addActivity(activity) {
-  const { username } = activity;
-
-  if (!activities.has(username)) {
-    activities.set(username, []);
+async function addActivity(activity) {
+  try {
+    const activityDoc = new Activity({
+      ...activity,
+      timestamp: new Date(activity.timestamp)
+    });
+    const saved = await activityDoc.save();
+    logger.debug('Activity saved', { id: saved.id, username: saved.username });
+    return saved.toJSON();
+  } catch (error) {
+    // Handle duplicate key error gracefully
+    if (error.code === 11000) {
+      logger.warn('Duplicate activity ignored', { id: activity.id });
+      return activity;
+    }
+    logger.error('Failed to save activity', { error: error.message });
+    throw error;
   }
-
-  activities.get(username).push(activity);
 }
 
 /**
@@ -30,9 +43,9 @@ function addActivity(activity) {
  * @param {string} options.sort - Sort order: 'desc' (newest first) or 'asc' (oldest first)
  * @param {string} options.startDate - Filter activities after this date (ISO string)
  * @param {string} options.endDate - Filter activities before this date (ISO string)
- * @returns {Object} - Object with activities array and pagination info
+ * @returns {Promise<Object>} - Object with activities array and pagination info
  */
-function getActivitiesByUser(username, options = {}) {
+async function getActivitiesByUser(username, options = {}) {
   const {
     limit = 20,
     cursor = null,
@@ -43,56 +56,70 @@ function getActivitiesByUser(username, options = {}) {
     endDate = null
   } = options;
 
-  let userActivities = activities.get(username) || [];
+  // Build query
+  const query = { username };
 
-  // Apply filters
   if (type) {
-    userActivities = userActivities.filter(a => a.type === type.toUpperCase());
+    query.type = type.toUpperCase();
   }
 
   if (repo) {
-    userActivities = userActivities.filter(a =>
-      a.repo.toLowerCase().includes(repo.toLowerCase())
-    );
+    query.repo = { $regex: repo, $options: 'i' };
   }
 
-  // ISO 8601 strings can be compared lexicographically for date ordering
-  if (startDate) {
-    const startIso = new Date(startDate).toISOString();
-    userActivities = userActivities.filter(a => a.timestamp >= startIso);
-  }
-
-  if (endDate) {
-    const endIso = new Date(endDate).toISOString();
-    userActivities = userActivities.filter(a => a.timestamp <= endIso);
-  }
-
-  // Sort activities using string comparison (ISO timestamps are lexicographically sortable)
-  const sortedActivities = [...userActivities].sort((a, b) => {
-    return sort === 'desc'
-      ? b.timestamp.localeCompare(a.timestamp)
-      : a.timestamp.localeCompare(b.timestamp);
-  });
-
-  // Get total count before pagination
-  const total = sortedActivities.length;
-
-  // Apply cursor-based pagination
-  let startIndex = 0;
-  if (cursor) {
-    const cursorIndex = sortedActivities.findIndex(a => a.id === cursor);
-    if (cursorIndex !== -1) {
-      startIndex = cursorIndex + 1;
+  if (startDate || endDate) {
+    query.timestamp = {};
+    if (startDate) {
+      query.timestamp.$gte = new Date(startDate);
+    }
+    if (endDate) {
+      query.timestamp.$lte = new Date(endDate);
     }
   }
 
-  // Get page of activities
-  const pageActivities = sortedActivities.slice(startIndex, startIndex + limit);
-  const hasMore = startIndex + limit < total;
-  const nextCursor = hasMore ? pageActivities[pageActivities.length - 1]?.id : null;
+  // Get total count for pagination
+  const total = await Activity.countDocuments(query);
+
+  // Apply cursor-based pagination
+  if (cursor) {
+    const cursorActivity = await Activity.findOne({ id: cursor });
+    if (cursorActivity) {
+      const cursorTimestamp = cursorActivity.timestamp;
+      if (sort === 'desc') {
+        query.timestamp = { ...query.timestamp, $lt: cursorTimestamp };
+      } else {
+        query.timestamp = { ...query.timestamp, $gt: cursorTimestamp };
+      }
+    }
+  }
+
+  // Execute query with sorting and limit
+  const sortOrder = sort === 'desc' ? -1 : 1;
+  const activities = await Activity.find(query)
+    .sort({ timestamp: sortOrder })
+    .limit(limit + 1) // Fetch one extra to determine hasMore
+    .lean();
+
+  // Transform results to match expected format
+  const hasMore = activities.length > limit;
+  const pageActivities = hasMore ? activities.slice(0, limit) : activities;
+  const nextCursor = hasMore && pageActivities.length > 0
+    ? pageActivities[pageActivities.length - 1].id
+    : null;
+
+  // Transform activities to JSON format
+  const transformedActivities = pageActivities.map(a => ({
+    id: a.id,
+    type: a.type,
+    username: a.username,
+    repo: a.repo,
+    message: a.message,
+    timestamp: a.timestamp.toISOString(),
+    metadata: a.metadata
+  }));
 
   return {
-    activities: pageActivities,
+    activities: transformedActivities,
     pagination: {
       total,
       hasMore,
@@ -104,26 +131,36 @@ function getActivitiesByUser(username, options = {}) {
 /**
  * Get activity count for a user
  * @param {string} username - GitHub username
- * @returns {number} - Total number of activities
+ * @returns {Promise<number>} - Total number of activities
  */
-function getActivityCount(username) {
-  const userActivities = activities.get(username) || [];
-  return userActivities.length;
+async function getActivityCount(username) {
+  return Activity.countDocuments({ username });
 }
 
 /**
  * Get all activities (for debugging)
- * @returns {Map} - All activities
+ * @returns {Promise<Array>} - All activities
  */
-function getAllActivities() {
-  return activities;
+async function getAllActivities() {
+  return Activity.find().lean();
 }
 
 /**
  * Clear all activities (for testing)
+ * @returns {Promise<void>}
  */
-function clearActivities() {
-  activities.clear();
+async function clearActivities() {
+  await Activity.deleteMany({});
+  logger.debug('All activities cleared');
+}
+
+/**
+ * Broadcast a new activity (placeholder for Phase 7 WebSocket integration)
+ * @param {Object} activity - Activity to broadcast
+ */
+function broadcastActivity(activity) {
+  // This will be implemented in Phase 7 for real-time updates
+  // For now, it's a no-op placeholder
 }
 
 module.exports = {
@@ -131,5 +168,6 @@ module.exports = {
   getActivitiesByUser,
   getActivityCount,
   getAllActivities,
-  clearActivities
+  clearActivities,
+  broadcastActivity
 };

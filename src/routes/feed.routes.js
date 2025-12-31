@@ -21,42 +21,46 @@ const { validateFeedParams } = require('../middleware/validateInput');
  * - startDate: Filter activities after this date (ISO string)
  * - endDate: Filter activities before this date (ISO string)
  */
-router.get('/:username', validateFeedParams, (req, res) => {
-  const { username } = req.params;
-  const { limit, cursor, type, repo, sort, startDate, endDate } = req.query;
+router.get('/:username', validateFeedParams, async (req, res, next) => {
+  try {
+    const { username } = req.params;
+    const { limit, cursor, type, repo, sort, startDate, endDate } = req.query;
 
-  const options = {};
+    const options = {};
 
-  if (limit) {
-    options.limit = parseInt(limit, 10);
-  }
-  if (cursor) {
-    options.cursor = cursor;
-  }
-  if (type) {
-    options.type = type;
-  }
-  if (repo) {
-    options.repo = repo;
-  }
-  if (sort) {
-    options.sort = sort.toLowerCase();
-  }
-  if (startDate) {
-    options.startDate = startDate;
-  }
-  if (endDate) {
-    options.endDate = endDate;
-  }
+    if (limit) {
+      options.limit = parseInt(limit, 10);
+    }
+    if (cursor) {
+      options.cursor = cursor;
+    }
+    if (type) {
+      options.type = type;
+    }
+    if (repo) {
+      options.repo = repo;
+    }
+    if (sort) {
+      options.sort = sort.toLowerCase();
+    }
+    if (startDate) {
+      options.startDate = startDate;
+    }
+    if (endDate) {
+      options.endDate = endDate;
+    }
 
-  const result = getActivitiesByUser(username, options);
+    const result = await getActivitiesByUser(username, options);
 
-  res.json({
-    username,
-    count: result.activities.length,
-    activities: result.activities,
-    pagination: result.pagination
-  });
+    res.json({
+      username,
+      count: result.activities.length,
+      activities: result.activities,
+      pagination: result.pagination
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 module.exports = router;

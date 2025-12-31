@@ -2,9 +2,10 @@
  * Integration Tests - Webhook Endpoints
  */
 
-const { describe, it, beforeEach, afterEach } = require('node:test');
+const { describe, it, before, after, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert');
 const http = require('http');
+const { setupTestDb, clearTestDb, teardownTestDb } = require('../setup');
 const app = require('../../src/app');
 const { clearActivities } = require('../../src/store/activityStore');
 const { pushPayload, pullRequestPayload, issuePayload } = require('../fixtures/webhookPayloads');
@@ -46,8 +47,16 @@ function request(options, body = null) {
 }
 
 describe('Webhook Endpoints', () => {
+  before(async () => {
+    await setupTestDb();
+  });
+
+  after(async () => {
+    await teardownTestDb();
+  });
+
   beforeEach(async () => {
-    clearActivities();
+    await clearActivities();
     await new Promise((resolve) => {
       server = app.listen(0, () => {
         const { port } = server.address();

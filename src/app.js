@@ -6,6 +6,7 @@
 const express = require('express');
 const config = require('./config');
 const logger = require('./utils/logger');
+const database = require('./config/database');
 
 // Routes
 const webhookRoutes = require('./routes/webhook.routes');
@@ -49,7 +50,8 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    database: database.isDbConnected() ? 'connected' : 'disconnected'
   });
 });
 
@@ -84,19 +86,32 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 // Start server
-if (require.main === module) {
-  app.listen(config.port, () => {
-    logger.info('Server started', {
-      port: config.port,
-      environment: config.nodeEnv
+async function startServer() {
+  try {
+    // Connect to MongoDB
+    await database.connect(config.mongodb.uri, config.mongodb.options);
+
+    app.listen(config.port, () => {
+      logger.info('Server started', {
+        port: config.port,
+        environment: config.nodeEnv
+      });
+      console.log(`\nGitHub Activity Feed Server running on http://localhost:${config.port}`);
+      console.log('\nEndpoints:');
+      console.log(`  POST /webhook/github  - Receive GitHub webhooks`);
+      console.log(`  GET  /feed/:username  - Get user activity feed`);
+      console.log(`  GET  /health          - Health check`);
+      console.log(`\nEnvironment: ${config.nodeEnv}`);
+      console.log(`Database: MongoDB connected`);
     });
-    console.log(`\nGitHub Activity Feed Server running on http://localhost:${config.port}`);
-    console.log('\nEndpoints:');
-    console.log(`  POST /webhook/github  - Receive GitHub webhooks`);
-    console.log(`  GET  /feed/:username  - Get user activity feed`);
-    console.log(`  GET  /health          - Health check`);
-    console.log(`\nEnvironment: ${config.nodeEnv}`);
-  });
+  } catch (error) {
+    logger.error('Failed to start server', { error: error.message });
+    process.exit(1);
+  }
+}
+
+if (require.main === module) {
+  startServer();
 }
 
 module.exports = app;
