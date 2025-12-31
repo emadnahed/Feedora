@@ -6,12 +6,13 @@
 const express = require('express');
 const router = express.Router();
 const { getActivitiesByUser } = require('../store/activityStore');
+const { validateFeedParams } = require('../middleware/validateInput');
 
 /**
  * GET /feed/:username
  * Returns the activity feed for a given user
  */
-router.get('/:username', (req, res) => {
+router.get('/:username', validateFeedParams, (req, res) => {
   const { username } = req.params;
   const { limit } = req.query;
 
