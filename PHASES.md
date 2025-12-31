@@ -133,60 +133,120 @@ GET /feed/:username?limit=20&cursor=xxx&type=PUSH&repo=owner/repo&sort=desc
 
 ---
 
-## Phase 5: Persistent Storage (Future)
+## Phase 5: Persistent Storage ✅
 
-**Status:** Planned
+**Status:** Complete
 
 **Objective:** Replace in-memory store with MongoDB.
 
-### Planned Deliverables:
-- [ ] MongoDB connection setup
-- [ ] Activity model with Mongoose
-- [ ] Database indexes on `username + timestamp`
-- [ ] Migration scripts
-- [ ] Connection pooling
+### Deliverables:
+- [x] MongoDB connection setup with Mongoose
+- [x] Activity model with schema validation
+- [x] Database indexes on `username + timestamp`
+- [x] Connection pooling configuration
+- [x] Graceful shutdown handling
+
+### Files Created:
+- `src/config/database.js`
+- `src/models/Activity.js`
+- `tests/setup.js`
+
+### Environment Variables:
+```
+MONGODB_URI=mongodb://localhost:27017/feedora
+MONGODB_POOL_SIZE=10
+```
 
 ---
 
-## Phase 6: Caching Layer (Future)
+## Phase 6: Caching Layer ✅
 
-**Status:** Planned
+**Status:** Complete
 
 **Objective:** Add Redis caching for hot feeds.
 
-### Planned Deliverables:
-- [ ] Redis connection setup
-- [ ] Cache-aside pattern for feeds
-- [ ] Cache invalidation on new activities
-- [ ] TTL configuration
+### Deliverables:
+- [x] Redis connection setup with ioredis
+- [x] Cache-aside pattern for feeds
+- [x] Cache invalidation on new activities
+- [x] TTL configuration
+- [x] Graceful fallback when Redis unavailable
+
+### Files Created:
+- `src/config/redis.js`
+- `src/services/cacheService.js`
+
+### Environment Variables:
+```
+REDIS_URL=redis://localhost:6379
+REDIS_TTL=300
+```
 
 ---
 
-## Phase 7: Real-time Updates (Future)
+## Phase 7: Real-time Updates ✅
 
-**Status:** Planned
+**Status:** Complete
 
-**Objective:** Add WebSocket/SSE support for live feeds.
+**Objective:** Add WebSocket support for live feeds.
 
-### Planned Deliverables:
-- [ ] WebSocket server setup
-- [ ] Live feed subscriptions
-- [ ] Event broadcasting
-- [ ] Connection management
+### Deliverables:
+- [x] WebSocket server setup with ws
+- [x] Live feed subscriptions per user
+- [x] Event broadcasting on new activities
+- [x] Connection management with heartbeat
+- [x] Client subscribe/unsubscribe messages
+
+### Files Created:
+- `src/services/websocketService.js`
+
+### WebSocket API:
+```
+WS /ws
+
+// Subscribe to a user's feed
+{"type": "subscribe", "username": "octocat"}
+
+// Unsubscribe from a user's feed
+{"type": "unsubscribe", "username": "octocat"}
+
+// Incoming activity broadcast
+{"type": "activity", "activity": {...}}
+```
 
 ---
 
-## Phase 8: Rate Limiting & Throttling (Future)
+## Phase 8: Rate Limiting & Throttling ✅
 
-**Status:** Planned
+**Status:** Complete
 
 **Objective:** Add rate limiting to protect the API.
 
-### Planned Deliverables:
-- [ ] Rate limiter middleware
-- [ ] Per-user rate limits
-- [ ] Sliding window algorithm
-- [ ] Rate limit headers
+### Deliverables:
+- [x] Rate limiter middleware with sliding window
+- [x] Redis-backed rate limiting (with memory fallback)
+- [x] Per-endpoint rate limits
+- [x] Rate limit headers (X-RateLimit-*)
+- [x] Configurable limits via environment
+
+### Files Created:
+- `src/middleware/rateLimiter.js`
+
+### Rate Limits:
+| Endpoint | Limit |
+|----------|-------|
+| `/webhook/github` | 1000 requests/minute |
+| `/feed/:username` | 60 requests/minute |
+| API (general) | 100 requests/minute |
+
+### Environment Variables:
+```
+RATE_LIMIT_WINDOW_MS=60000
+RATE_LIMIT_API_MAX=100
+RATE_LIMIT_WEBHOOK_MAX=1000
+RATE_LIMIT_FEED_MAX=60
+RATE_LIMITING=true
+```
 
 ---
 
@@ -199,6 +259,10 @@ npm install
 # Set up environment variables
 cp .env.example .env
 # Edit .env with your values
+
+# Start MongoDB and Redis (Docker example)
+docker run -d -p 27017:27017 mongo
+docker run -d -p 6379:6379 redis
 
 # Run development server
 npm run dev
@@ -220,6 +284,7 @@ npm start
 | GET | `/feed/:username` | Get user activity feed |
 | GET | `/health` | Health check |
 | GET | `/` | API information |
+| WS | `/ws` | WebSocket real-time feed |
 
 ---
 
@@ -233,6 +298,7 @@ GitHub Webhooks
 ├─────────────────────────────────────────┤
 │  Middleware Layer                       │
 │  ├─ Request Logger                      │
+│  ├─ Rate Limiter                        │
 │  ├─ Signature Validation                │
 │  └─ Input Validation                    │
 ├─────────────────────────────────────────┤
@@ -241,11 +307,60 @@ GitHub Webhooks
 │  └─ /feed/:username                     │
 ├─────────────────────────────────────────┤
 │  Services Layer                         │
-│  └─ Event Normalizer                    │
+│  ├─ Event Normalizer                    │
+│  ├─ Cache Service (Redis)               │
+│  └─ WebSocket Service                   │
 ├─────────────────────────────────────────┤
 │  Storage Layer                          │
-│  └─ Activity Store (In-Memory)          │
+│  └─ Activity Store (MongoDB)            │
 └─────────────────────────────────────────┘
      ↓
-  Feed API
+  Feed API / WebSocket
+```
+
+---
+
+## Project Structure
+
+```
+feedora/
+├── src/
+│   ├── app.js                 # Main application entry
+│   ├── config/
+│   │   ├── index.js           # Configuration
+│   │   ├── database.js        # MongoDB connection
+│   │   └── redis.js           # Redis connection
+│   ├── middleware/
+│   │   ├── errorHandler.js    # Error handling
+│   │   ├── rateLimiter.js     # Rate limiting
+│   │   ├── requestLogger.js   # Request logging
+│   │   ├── validateInput.js   # Input validation
+│   │   └── validateSignature.js # Webhook signature
+│   ├── models/
+│   │   └── Activity.js        # MongoDB Activity model
+│   ├── routes/
+│   │   ├── feed.routes.js     # Feed endpoints
+│   │   └── webhook.routes.js  # Webhook endpoints
+│   ├── services/
+│   │   ├── cacheService.js    # Redis caching
+│   │   ├── eventNormalizer.js # Event normalization
+│   │   └── websocketService.js # WebSocket handling
+│   ├── store/
+│   │   └── activityStore.js   # Activity data access
+│   └── utils/
+│       ├── errors.js          # Custom error classes
+│       └── logger.js          # Structured logging
+├── tests/
+│   ├── fixtures/
+│   │   └── webhookPayloads.js # Test data
+│   ├── integration/
+│   │   ├── feed.test.js
+│   │   └── webhook.test.js
+│   ├── unit/
+│   │   ├── activityStore.test.js
+│   │   └── eventNormalizer.test.js
+│   └── setup.js               # Test database setup
+├── .env.example
+├── package.json
+└── PHASES.md
 ```
