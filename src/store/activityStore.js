@@ -1,11 +1,12 @@
 /**
  * Activity Store
  * MongoDB-backed storage for normalized activities
- * Provides efficient feed retrieval with pagination and filtering
+ * Provides efficient feed retrieval with pagination, filtering, and caching
  */
 
 const Activity = require('../models/Activity');
 const logger = require('../utils/logger');
+const { getCachedFeed, setCachedFeed, invalidateUserCache, clearCache } = require('../services/cacheService');
 
 /**
  * Add an activity to the store
@@ -20,6 +21,10 @@ async function addActivity(activity) {
     });
     const saved = await activityDoc.save();
     logger.debug('Activity saved', { id: saved.id, username: saved.username });
+
+    // Invalidate cache for this user since their feed has changed
+    await invalidateUserCache(saved.username);
+
     return saved.toJSON();
   } catch (error) {
     // Handle duplicate key error gracefully
@@ -34,6 +39,7 @@ async function addActivity(activity) {
 
 /**
  * Get activities for a specific user with pagination and filtering
+ * Uses cache-aside pattern: check cache first, then database
  * @param {string} username - GitHub username
  * @param {Object} options - Query options
  * @param {number} options.limit - Maximum number of activities to return (default: 20)
@@ -55,6 +61,13 @@ async function getActivitiesByUser(username, options = {}) {
     startDate = null,
     endDate = null
   } = options;
+
+  // Try to get from cache first
+  const cacheOptions = { limit, cursor: cursor || '', type: type || '', repo: repo || '', sort, startDate: startDate || '', endDate: endDate || '' };
+  const cached = await getCachedFeed(username, cacheOptions);
+  if (cached) {
+    return cached;
+  }
 
   // Build query
   const query = { username };
@@ -118,7 +131,7 @@ async function getActivitiesByUser(username, options = {}) {
     metadata: a.metadata
   }));
 
-  return {
+  const result = {
     activities: transformedActivities,
     pagination: {
       total,
@@ -126,6 +139,11 @@ async function getActivitiesByUser(username, options = {}) {
       nextCursor
     }
   };
+
+  // Cache the result
+  await setCachedFeed(username, cacheOptions, result);
+
+  return result;
 }
 
 /**
@@ -151,6 +169,7 @@ async function getAllActivities() {
  */
 async function clearActivities() {
   await Activity.deleteMany({});
+  await clearCache();
   logger.debug('All activities cleared');
 }
 

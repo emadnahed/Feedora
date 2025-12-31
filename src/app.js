@@ -7,6 +7,7 @@ const express = require('express');
 const config = require('./config');
 const logger = require('./utils/logger');
 const database = require('./config/database');
+const redis = require('./config/redis');
 
 // Routes
 const webhookRoutes = require('./routes/webhook.routes');
@@ -51,7 +52,8 @@ app.get('/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    database: database.isDbConnected() ? 'connected' : 'disconnected'
+    database: database.isDbConnected() ? 'connected' : 'disconnected',
+    cache: redis.isRedisConnected() ? 'connected' : 'disconnected'
   });
 });
 
@@ -91,6 +93,13 @@ async function startServer() {
     // Connect to MongoDB
     await database.connect(config.mongodb.uri, config.mongodb.options);
 
+    // Connect to Redis (optional - server works without cache)
+    try {
+      await redis.connect(config.redis.url);
+    } catch (redisError) {
+      logger.warn('Redis connection failed, running without cache', { error: redisError.message });
+    }
+
     app.listen(config.port, () => {
       logger.info('Server started', {
         port: config.port,
@@ -103,6 +112,7 @@ async function startServer() {
       console.log(`  GET  /health          - Health check`);
       console.log(`\nEnvironment: ${config.nodeEnv}`);
       console.log(`Database: MongoDB connected`);
+      console.log(`Cache: ${redis.isRedisConnected() ? 'Redis connected' : 'Disabled'}`);
     });
   } catch (error) {
     logger.error('Failed to start server', { error: error.message });
