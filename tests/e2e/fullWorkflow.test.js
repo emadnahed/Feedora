@@ -6,7 +6,8 @@
 const { describe, it, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert');
 const http = require('http');
-const app = require('../../src/app');
+const { setupTestDb, teardownTestDb } = require('../setup');
+const { app } = require('../../src/app');
 const { clearActivities } = require('../../src/store/activityStore');
 
 let server;
@@ -44,6 +45,7 @@ function request(options, body = null) {
 
 describe('E2E: Full Workflow Tests', () => {
   before(async () => {
+    await setupTestDb();
     await new Promise((resolve) => {
       server = app.listen(0, () => {
         port = server.address().port;
@@ -52,12 +54,13 @@ describe('E2E: Full Workflow Tests', () => {
     });
   });
 
-  after(() => {
+  after(async () => {
     if (server) server.close();
+    await teardownTestDb();
   });
 
-  beforeEach(() => {
-    clearActivities();
+  beforeEach(async () => {
+    await clearActivities();
   });
 
   describe('Complete User Journey', () => {
@@ -460,6 +463,18 @@ describe('E2E: Full Workflow Tests', () => {
       // Verify it's a valid UUID format
       assert.match(response.headers['x-request-id'], /^[0-9a-f-]{36}$/);
     });
+
+    it('should include rate limit headers in responses', async () => {
+      const response = await request({
+        hostname: 'localhost',
+        path: '/feed/testuser',
+        method: 'GET'
+      });
+
+      assert.ok(response.headers['x-ratelimit-limit']);
+      assert.ok(response.headers['x-ratelimit-remaining']);
+      assert.ok(response.headers['x-ratelimit-reset']);
+    });
   });
 
   describe('API Info Endpoints', () => {
@@ -473,11 +488,13 @@ describe('E2E: Full Workflow Tests', () => {
       assert.strictEqual(response.statusCode, 200);
       assert.strictEqual(response.body.name, 'GitHub Activity Feed System');
       assert.ok(response.body.endpoints);
+      assert.ok(response.body.endpoints.websocket);
       assert.ok(response.body.documentation);
       assert.ok(response.body.documentation.feedParams);
+      assert.ok(response.body.documentation.websocket);
     });
 
-    it('should return health status with uptime', async () => {
+    it('should return health status with all services', async () => {
       const response = await request({
         hostname: 'localhost',
         path: '/health',
@@ -489,6 +506,9 @@ describe('E2E: Full Workflow Tests', () => {
       assert.ok(response.body.timestamp);
       assert.ok(typeof response.body.uptime === 'number');
       assert.ok(response.body.uptime >= 0);
+      assert.ok('database' in response.body);
+      assert.ok('cache' in response.body);
+      assert.ok('websocket' in response.body);
     });
   });
 });
